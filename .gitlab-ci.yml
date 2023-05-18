@@ -1,0 +1,75 @@
+# This file is a template, and might need editing before it works on your project.
+# This is a sample GitLab CI/CD configuration file that should run without any modifications.
+# It demonstrates a basic 3 stage CI/CD pipeline. Instead of real tests or scripts,
+# it uses echo commands to simulate the pipeline execution.
+#
+# A pipeline is composed of independent jobs that run scripts, grouped into stages.
+# Stages run in sequential order, but jobs within stages run in parallel.
+#
+# For more information, see: https://docs.gitlab.com/ee/ci/yaml/README.html#stages
+
+# Change pip's cache directory to be inside the project directory since we can
+# only cache local items
+image: python:3.9
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+
+
+stages: # List of stages for jobs, and their order of execution
+  - setup
+  - test
+  - build
+
+
+
+setup-frontend:
+  stage: setup
+  image: node:16.16.0
+  script:
+    - cd client
+    - npm ci --cache .npm --prefer-offline --production
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - client/.npm/
+
+backend-test: # This job runs in the test stage.
+  stage: test    # It only starts when the job in the build stage completes successfully.
+  image: python:3.9
+  script:
+    - python --version  # Print out python version for debugging
+    - python3 -m venv venv
+    - source venv/bin/activate
+    - pip install -qr requirements.txt
+    - echo "Finished installing dependencies"
+    - cd server
+    - python -m pytest --disable-pytest-warnings --junitxml=report.xml
+  cache:
+    paths:
+      - .cache/pip
+      - venv/
+  artifacts:
+    when: always
+    reports:
+      junit: server/report.xml
+
+#    - coverage run -m pytest --disable-pytest-warnings && coverage report -m
+
+frontend-build: # This job runs in the test stage.
+  stage: build    # It only starts when the job in the build stage completes successfully.
+  image: node:16.16.0
+  needs:
+    - job: setup-frontend
+  cache:
+    key:
+      files:
+        - package-lock.json
+    policy: pull
+  script:
+    - cd client
+    - ls
+    - npm ci
+    - npm run build
